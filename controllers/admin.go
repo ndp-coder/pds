@@ -8,6 +8,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 
 // AddMedicine godoc
 // @Summary Add new medicine

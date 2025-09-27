@@ -1,22 +1,4 @@
-swagger: "2.0"
-info:
-  contact:
-    email: nagadurga20054@gmail.com
-    name: Naga Durga Prasad
-  description: This is the backend API for managing doctors, pharmacists, medicines,
-    and prescriptions.
-  termsOfService: http://swagger.io/terms/
-  title: Prescription Dispensing System API
-  version: "1.0"
-host: localhost:8080
 basePath: /
-
-securityDefinitions:
-  ApiKeyAuth:
-    type: apiKey
-    in: header
-    name: Authorization
-
 definitions:
   models.Add_Medicine:
     properties:
@@ -51,7 +33,16 @@ definitions:
       role:
         type: string
     type: object
-
+host: localhost:8080
+info:
+  contact:
+    email: support@pds.com
+    name: NDP
+  description: This is the backend API for managing doctors, pharmacists, medicines,
+    and prescriptions.
+  termsOfService: http://swagger.io/terms/
+  title: Prescription Dispensing System API
+  version: "1.0"
 paths:
   /Dec-med:
     post:
@@ -85,7 +76,6 @@ paths:
       summary: Decrease medicine stock
       tags:
       - Medicine
-
   /addmedicine:
     post:
       consumes:
@@ -118,7 +108,6 @@ paths:
       summary: Add new medicine
       tags:
       - Medicine
-
   /createDoctor:
     post:
       consumes:
@@ -151,7 +140,6 @@ paths:
       summary: Create a new doctor
       tags:
       - Doctor
-
   /createPharmacist:
     post:
       consumes:
@@ -184,7 +172,6 @@ paths:
       summary: Create a new pharmacist
       tags:
       - Pharmacist
-
   /getmedicen:
     get:
       consumes:
@@ -210,7 +197,6 @@ paths:
       summary: Get all medicines
       tags:
       - Medicine
-
   /login:
     post:
       consumes:
@@ -241,7 +227,6 @@ paths:
       summary: Login user
       tags:
       - Auth
-
   /prescription:
     post:
       consumes:
@@ -274,3 +259,9 @@ paths:
       summary: Create prescription
       tags:
       - Prescription
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
