@@ -1,0 +1,262 @@
+basePath: /
+definitions:
+  models.Add_Medicine:
+    properties:
+      dosage_form:
+        type: string
+      medicine_name:
+        type: string
+      stock_quantity:
+        type: integer
+    type: object
+  models.Prescription:
+    properties:
+      dosage_form:
+        type: string
+      id:
+        type: integer
+      medicine_name:
+        type: string
+      patient_name:
+        type: string
+      quantity:
+        type: integer
+    type: object
+  models.User:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+      role:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@pds.com
+    name: NDP
+  description: This is the backend API for managing doctors, pharmacists, medicines,
+    and prescriptions.
+  termsOfService: http://swagger.io/terms/
+  title: Prescription Dispensing System API
+  version: "1.0"
+paths:
+  /Dec-med:
+    post:
+      consumes:
+      - application/json
+      description: Pharmacist decreases the stock after dispensing
+      parameters:
+      - description: Prescription Data
+        in: body
+        name: medicine
+        required: true
+        schema:
+          $ref: '#/definitions/models.Prescription'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Decrease medicine stock
+      tags:
+      - Medicine
+  /addmedicine:
+    post:
+      consumes:
+      - application/json
+      description: Add a new medicine to the stock
+      parameters:
+      - description: Medicine Data
+        in: body
+        name: medicine
+        required: true
+        schema:
+          $ref: '#/definitions/models.Add_Medicine'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Add new medicine
+      tags:
+      - Medicine
+  /createDoctor:
+    post:
+      consumes:
+      - application/json
+      description: Admin can create a doctor account
+      parameters:
+      - description: Doctor Data
+        in: body
+        name: doctor
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a new doctor
+      tags:
+      - Doctor
+  /createPharmacist:
+    post:
+      consumes:
+      - application/json
+      description: Admin can create a pharmacist account
+      parameters:
+      - description: Pharmacist Data
+        in: body
+        name: pharmacist
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a new pharmacist
+      tags:
+      - Pharmacist
+  /getmedicen:
+    get:
+      consumes:
+      - application/json
+      description: Fetch list of all available medicines
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Add_Medicine'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all medicines
+      tags:
+      - Medicine
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate a user (doctor, pharmacist, or admin)
+      parameters:
+      - description: User login credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login user
+      tags:
+      - Auth
+  /prescription:
+    post:
+      consumes:
+      - application/json
+      description: Doctor can create a prescription for a patient
+      parameters:
+      - description: Prescription Data
+        in: body
+        name: prescription
+        required: true
+        schema:
+          $ref: '#/definitions/models.Prescription'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create prescription
+      tags:
+      - Prescription
+swagger: "2.0"

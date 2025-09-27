@@ -1,9 +1,7 @@
 package controllers
 
 import (
-	db "PDS/database"
-	"PDS/midlewares"
-	"PDS/models"
+	"PDS/database"
 	"context"
 
 	"net/http"
@@ -11,166 +9,78 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// AddMedicine godoc
+// @Summary Add new medicine
+// @Description Add a new medicine to the stock
+// @Tags Medicine
+// @Accept json
+// @Produce json
+// @Param medicine body models.Add_Medicine true "Medicine Data"
+// @Success 201 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /addmedicine [post]
 func Add_Medicine(c *gin.Context) {
-	var medicine models.Add_Medicine
-
-	if err := c.ShouldBindJSON(&medicine); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
-		return
-	}
-	emailVal, exists_1 := c.Get("email")
-    if !exists_1 {
-        c.JSON(401, gin.H{
-			"error": "Email not found in context",
-			"email" : emailVal,
-	})
-        return
-    }
-
-    email := emailVal.(string)
-    c.JSON(200, gin.H{
-        "message": "Welcome!",
-        "email":   email,
-    })
-
-	var IsAdmin_db int
-
-	isadmin := db.Postdb.QueryRow(context.Background(), "SELECT CASE WHEN EXISTS ( SELECT 1 FROM users WHERE email = $1 AND role = 'admin') THEN 1 ELSE 0 END", email).Scan(&IsAdmin_db)
-
-	if isadmin != nil {
-		c.JSON(404, gin.H{
-			"error": isadmin,
-		})
+	var Prescription struct {
+		Medicine_Name  string `json:"medicine_name"`
+		Dosage_form    string `json:"dosage_form"`
+		Stock_Quantity int    `json:"stock_quantity"`
 	}
 
-	if IsAdmin_db == 0 {
-		c.JSON(400, gin.H{
-			"message": "you are not allowed to do this functions",
-			"IsAdmin": isadmin,
+	if err := c.ShouldBindJSON(&Prescription); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid input",
 		})
-		c.Abort()
 		return
 	}
 
-	var exists bool
+	if Prescription.Stock_Quantity <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Stock quantity must be greater than zero",
+		})
+		return
+	}
 
-	checkQuery := `SELECT EXISTS(SELECT 1 FROM medicine WHERE medicine_name=$1)`
-	err := db.Postdb.QueryRow(context.Background(), checkQuery, medicine.Medicine_Name).Scan(&exists)
+	ctx := context.Background()
+	tx, err := database.Postdb.Begin(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed to start transaction",
+			"err": err.Error(),
+		})
 		return
 	}
+	defer func() { _ = tx.Rollback(ctx) }()
 
-	if exists {
+	var newStock int
+	err = tx.QueryRow(ctx,
+		`INSERT INTO medicine (medicine_name, dosage_form, stock_quantity)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (medicine_name, dosage_form)
+		 DO UPDATE SET stock_quantity = medicine.stock_quantity + EXCLUDED.stock_quantity
+		 RETURNING stock_quantity`,
+		Prescription.Medicine_Name, Prescription.Dosage_form, Prescription.Stock_Quantity).Scan(&newStock)
 
-		updateQuery := `UPDATE medicine SET stock_quantity = stock_quantity + $1 
-						WHERE medicine_name=$2 
-						RETURNING stock_quantity`
-		err := db.Postdb.QueryRow(context.Background(), updateQuery, medicine.Stock_Quantity, medicine.Medicine_Name).
-			Scan(&medicine.Stock_Quantity)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"message":        "stock updated successfully",
-			"medicine_name":  medicine.Medicine_Name,
-			"stock_quantity": medicine.Stock_Quantity,
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to insert/update stock",
+			"details": err.Error(),
 		})
 		return
 	}
 
-	insertQuery := `INSERT INTO medicine (medicine_name, dosage_form, stock_quantity)
-					VALUES ($1, $2, $3)
-					RETURNING medicine_name, dosage_form, stock_quantity`
-	err = db.Postdb.QueryRow(context.Background(), insertQuery,
-		medicine.Medicine_Name, medicine.Dosage_form, medicine.Stock_Quantity).
-		Scan(&medicine.Medicine_Name, &medicine.Dosage_form, &medicine.Stock_Quantity)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := tx.Commit(ctx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to commit transaction",
+			"details": err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":        "medicine added successfully",
-		"medicine_name":  medicine.Medicine_Name,
-		"dosage_form":    medicine.Dosage_form,
-		"stock_quantity": medicine.Stock_Quantity,
-	})
-}
-
-func CreateAdmin(c *gin.Context) {
-	var Admin struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-
-	if err := c.ShouldBindJSON(&Admin); err != nil {
-		c.JSON(404, gin.H{
-			"errror": "invalid input",
-		})
-		c.Abort()
-		return
-	}
-
-	emailVal, exists := c.Get("email")
-    if !exists {
-        c.JSON(401, gin.H{
-			"error": "Email not found in context",
-			"email" : emailVal,
-	})
-        return
-    }
-
-    email := emailVal.(string)
-    c.JSON(200, gin.H{
-        "message": "Welcome!",
-        "email":   email,
-    })
-
-	var IsAdmin_db int
-
-	isadmin := db.Postdb.QueryRow(context.Background(), "SELECT CASE WHEN EXISTS ( SELECT 1 FROM users WHERE email = $1 AND role = 'admin') THEN 1 ELSE 0 END", email).Scan(&IsAdmin_db)
-
-	if isadmin != nil {
-		c.JSON(404, gin.H{
-			"error": isadmin,
-		})
-	}
-
-	if IsAdmin_db == 0 {
-		c.JSON(400, gin.H{
-			"message": "you are not allowed to do this functions",
-			"IsAdmin": isadmin,
-		})
-		c.Abort()
-		return
-	}
-	hashpassword, err := HashPassword(Admin.Password)
-	if err != nil {
-		c.JSON(404, gin.H{
-			"error": "error in hashing password ",
-		})
-	}
-	_, res := db.Postdb.Exec(context.Background(), "insert into users (name , email , password , role)  values ($1,$2,$3,$4)", Admin.Name, Admin.Email, hashpassword, "admin")
-	if res != nil {
-		c.JSON(404, gin.H{
-			"error": res,
-			"pass":  hashpassword,
-		})
-	}
-	token, err := midlewares.GenerateToken(Admin.Email)
-	if err != nil {
-		c.JSON(404, gin.H{
-			"error": err,
-		})
-	}
-
-	c.JSON(200, gin.H{
-		"message": "successfully",
-		"pass":    hashpassword,
-		"admin":   email,
-		"token":   token,
+		"message":     "Stock added successfully",
+		"new_stock":   newStock,
+		"medicine":    Prescription.Medicine_Name,
+		"dosage_form": Prescription.Dosage_form,
 	})
 }

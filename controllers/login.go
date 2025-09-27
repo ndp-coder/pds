@@ -33,7 +33,18 @@ func VerifyHashPassword(hashedPassword, Password string) bool {
 	return err == nil
 }
 
+// Login godoc
+// @Summary Login user
+// @Description Authenticate a user (doctor, pharmacist, or admin)
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param credentials body models.User true "User login credentials"
+// @Success 200 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /login [post]
 func Login(c *gin.Context) {
+	 // logic
 
 	if err := c.ShouldBindJSON(&Login_details); err != nil {
 		c.JSON(404, gin.H{

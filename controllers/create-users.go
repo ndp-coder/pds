@@ -6,7 +6,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// CreateDoctor godoc
+// @Summary Create a new doctor
+// @Description Admin can create a doctor account
+// @Tags Doctor
+// @Accept json
+// @Produce json
+// @Param doctor body models.User true "Doctor Data"
+// @Success 201 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /createDoctor [post]
 func CreateDocter(c *gin.Context) {
+	 // logic
 
 	var Docter struct {
 	Name     string `json:"name"`
@@ -70,7 +82,20 @@ func CreateDocter(c *gin.Context) {
 	})
 }
 
+
+// CreatePharmacist godoc
+// @Summary Create a new pharmacist
+// @Description Admin can create a pharmacist account
+// @Tags Pharmacist
+// @Accept json
+// @Produce json
+// @Param pharmacist body models.User true "Pharmacist Data"
+// @Success 201 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /createPharmacist [post]
 func CreatePharmasist(c *gin.Context){
+	 // logic
 
 	var Pharmasist struct {
 	Name     string `json:"name"`

@@ -7,7 +7,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Prescription godoc
+// @Summary Create prescription
+// @Description Doctor can create a prescription for a patient
+// @Tags Prescription
+// @Accept json
+// @Produce json
+// @Param prescription body models.Prescription true "Prescription Data"
+// @Success 201 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /prescription [post]
 func Prescription(c *gin.Context) {
+	 // logic
 
 	var Pres_details struct {
 		Patient_Name  string `json:"patient_name"`
@@ -39,7 +51,7 @@ func Prescription(c *gin.Context) {
 	})
 
 	var IsAdmin_db int
-	res_0 := database.Postdb.QueryRow(context.Background(), "SELECT CASE WHEN EXISTS ( SELECT 1 FROM users WHERE email = $1 AND role = 'doctor') THEN 1 ELSE 0 END", email).Scan(&IsAdmin_db)
+	res_0 := database.Postdb.QueryRow(context.Background(), "SELECT CASE WHEN EXISTS ( SELECT 1 FROM users WHERE email = $1 AND role = 'docter') THEN 1 ELSE 0 END", email).Scan(&IsAdmin_db)
 
 	if res_0 != nil {
 		c.JSON(400, gin.H{

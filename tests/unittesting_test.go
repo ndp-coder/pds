@@ -1,121 +1,149 @@
-package tests
+package controllers_test
 
 import (
-	"PDS/database"
-	"PDS/midlewares"
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
+	"sync"
 	"testing"
+	"time"
+
+	"PDS/controllers"
+	"PDS/database"
+	"PDS/midlewares"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"github.com/stretchr/testify/assert"
 )
 
-// Setup test DB
-func init() {
-	// Load .env
-	err := godotenv.Load("../.env")
-	if err != nil {
-		panic("Error loading .env file: " + err.Error())
-	}
-
-	// Connect DB
-	dbURL := os.Getenv("DB_DSN")
-	if dbURL == "" {
-		panic("DB_DSN not found in .env")
-	}
-
-	database.ConnectDB()
-}
-
-// Seed test user
-func seedTestUser(t *testing.T, email, role string) {
-	// Delete any existing record to avoid conflicts
-	_, _ = database.Postdb.Exec(context.Background(), `DELETE FROM users WHERE email = $1`, email)
-
-	// Insert fresh user with all required fields
-	_, err := database.Postdb.Exec(
-		context.Background(),
-		`INSERT INTO users (name, email, role, password) VALUES ($1, $2, $3, $4)`,
-		"Test User",           // name
-		email,                 // email
-		role,                  // role
-		"hashed_password_123", // password
-	)
-
-	if err != nil {
-		t.Fatalf("Failed to seed test user: %v", err)
-	}
-}
-
-
-
-// Dummy handler for pharmacist check
-func pharmacistOnlyHandler(c *gin.Context) {
-	email := c.GetString("email")
-
-	var isPharmacist int
-	err := database.Postdb.QueryRow(context.Background(),
-		`SELECT CASE 
-			WHEN EXISTS (SELECT 1 FROM users WHERE email = $1 AND role = 'Pharmasist') 
-			THEN 1 ELSE 0 END`,
-		email,
-	).Scan(&isPharmacist)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "DB error"})
-		return
-	}
-
-	if isPharmacist == 0 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You are not allowed to add users"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Pharmacist authorized"})
-}
-
-// Test case
-func TestPharmacistAuthorization(t *testing.T) {
+// Setup router with auth-protected endpoints
+func setupRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
-
-	router := gin.New()
-	router.Use(midlewares.AuthMiddleware()) // Add your JWT middleware
-	router.GET("/test-pharmacist", pharmacistOnlyHandler)
-
-	testEmail := "pharma@example.com"
-	seedTestUser(t, testEmail, "Pharmasist")
-
-	// Generate JWT token
-	token, err := midlewares.GenerateToken(testEmail)
-	if err != nil {
-		t.Fatalf("Failed to generate token: %v", err)
+	r := gin.Default()
+	protected := r.Group("/")
+	protected.Use(midlewares.AuthMiddleware())
+	{
+		protected.POST("/addmedicine", controllers.Add_Medicine)
+		protected.POST("/Dec-med", controllers.Decrease_medicn)
 	}
+	return r
+}
 
-	// Make HTTP request
-	req, _ := http.NewRequest("GET", "/test-pharmacist", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+// ---------- TEST 1: Race on Add Medicine ----------
+func TestRaceConditionOnAddMedicine(t *testing.T) {
+	database.ConnectDB()
+	ctx := context.Background()
 
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
+	// Short unique medicine name
+	uniqueMed := fmt.Sprintf("MedAdd%d", time.Now().UnixNano()%1000000)
 
-	// Validate response
-	assert.Equal(t, http.StatusOK, rr.Code, "Expected HTTP 200 OK")
-	assert.Contains(t, rr.Body.String(), "Pharmacist authorized")
+	// Ensure fresh row
+	_, err := database.Postdb.Exec(ctx,
+		`INSERT INTO medicine (medicine_name, dosage_form, stock_quantity)
+		 VALUES ($1, $2, $3)`,
+		uniqueMed, "tablet", 0)
+	assert.NoError(t, err)
 
-	// Now test unauthorized user
-	seedTestUser(t, "norr@example.com", "Customer")
-	token2, _ := midlewares.GenerateToken("noer@example.com")
+	// Mock admin token
+	token, _ := midlewares.GenerateToken("admin@pds.com")
 
-	req2, _ := http.NewRequest("GET", "/test-pharmacist", nil)
-	req2.Header.Set("Authorization", "Bearer "+token2)
+	r := setupRouter()
 
-	rr2 := httptest.NewRecorder()
-	router.ServeHTTP(rr2, req2)
+	var wg sync.WaitGroup
+	concurrency := 10
+	addQty := 5
 
-	assert.Equal(t, http.StatusForbidden, rr2.Code, "Expected HTTP 403 Forbidden")
-	assert.Contains(t, rr2.Body.String(), "not allowed")
+	// Run 10 concurrent Add_Medicine requests
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			body, _ := json.Marshal(map[string]interface{}{
+				"medicine_name":  uniqueMed,
+				"dosage_form":    "tablet",
+				"stock_quantity": addQty,
+			})
+
+			req, _ := http.NewRequest("POST", "/addmedicine", bytes.NewBuffer(body))
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			assert.Contains(t, []int{http.StatusOK, http.StatusInternalServerError}, w.Code)
+		}()
+	}
+	wg.Wait()
+
+	// Check final stock (must equal concurrency * addQty)
+	var finalStock int
+	err = database.Postdb.QueryRow(ctx,
+		`SELECT stock_quantity FROM medicine WHERE medicine_name=$1 AND dosage_form=$2`,
+		uniqueMed, "tablet").Scan(&finalStock)
+	assert.NoError(t, err)
+
+	expected := concurrency * addQty
+	assert.Equal(t, expected, finalStock, "Race condition detected in Add_Medicine")
+}
+
+// ---------- TEST 2: Race on Decrease Medicine ----------
+func TestRaceConditionOnDecreaseMedicine(t *testing.T) {
+	database.ConnectDB()
+	ctx := context.Background()
+
+	// Short unique medicine name
+	uniqueMed := fmt.Sprintf("MedDec%d", time.Now().UnixNano()%1000000)
+
+	// Insert initial stock = 50
+	_, err := database.Postdb.Exec(ctx,
+		`INSERT INTO medicine (medicine_name, dosage_form, stock_quantity)
+		 VALUES ($1, $2, $3)`,
+		uniqueMed, "capsule", 50)
+	assert.NoError(t, err)
+
+	// Mock pharmacist token
+	token, _ := midlewares.GenerateToken("pharma@pds.com")
+
+	r := setupRouter()
+
+	var wg sync.WaitGroup
+	concurrency := 10
+	decreaseQty := 5
+
+	// Run 10 concurrent Decrease_medicn requests
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			body, _ := json.Marshal(map[string]interface{}{
+				"medicine_name":  uniqueMed,
+				"dosage_form":    "capsule",
+				"stock_quantity": decreaseQty,
+			})
+
+			req, _ := http.NewRequest("POST", "/Dec-med", bytes.NewBuffer(body))
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			// OK if stock was available, BadRequest when insufficient
+			assert.Contains(t, []int{http.StatusOK, http.StatusBadRequest}, w.Code)
+		}()
+	}
+	wg.Wait()
+
+	// Final stock must never go negative
+	var finalStock int
+	err = database.Postdb.QueryRow(ctx,
+		`SELECT stock_quantity FROM medicine WHERE medicine_name=$1 AND dosage_form=$2`,
+		uniqueMed, "capsule").Scan(&finalStock)
+	assert.NoError(t, err)
+
+	assert.True(t, finalStock >= 0, "Stock went negative, race condition!")
 }

@@ -9,7 +9,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// DecreaseMedicine godoc
+// @Summary Decrease medicine stock
+// @Description Pharmacist decreases the stock after dispensing
+// @Tags Medicine
+// @Accept json
+// @Produce json
+// @Param medicine body models.Prescription true "Prescription Data"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /Dec-med [post]
 func Decrease_medicn(c *gin.Context) {
+	// logic 
 	var Prescription struct {
 		Medicine_Name  string `json:"medicine_name"`
 		Dosage_form    string `json:"dosage_form"`
@@ -24,41 +36,41 @@ func Decrease_medicn(c *gin.Context) {
 	}
 
 	emailVal, exists := c.Get("email")
-    if !exists {
-        c.JSON(401, gin.H{
+	if !exists {
+		c.JSON(401, gin.H{
 			"error": "Email not found in context",
-			"email" : emailVal,
+			"email": emailVal,
+		})
+		return
+	}
+
+	email := emailVal.(string)
+	c.JSON(200, gin.H{
+		"message": "Welcome!",
+		"email":   email,
 	})
-        return
-    }
 
-    email := emailVal.(string)
-    c.JSON(200, gin.H{
-        "message": "Welcome!",
-        "email":   email,
-    })
+	var IsAdmin_db int
+	res := database.Postdb.QueryRow(context.Background(),
+		"SELECT CASE WHEN EXISTS ( SELECT 1 FROM users WHERE email = $1 AND role = 'pharmasist') THEN 1 ELSE 0 END",
+		email).Scan(&IsAdmin_db)
 
-	var IsAdmin_db int 
-	res := database.Postdb.QueryRow(context.Background(), "SELECT CASE WHEN EXISTS ( SELECT 1 FROM users WHERE email = $1 AND role = 'pharmasist') THEN 1 ELSE 0 END", email).Scan(&IsAdmin_db)
-
-	if res != nil{
-		c.JSON(400 , gin.H{
-			"errro" : "cant fectch admin from database",
+	if res != nil {
+		c.JSON(400, gin.H{
+			"errro": "cant fectch admin from database",
 		})
 		c.Abort()
 		return
 	}
 
-	if IsAdmin_db == 0{
-		c.JSON(404 , gin.H{
-			"message" : "you are not allowed to add users",
-			"email" : email,
-			
+	if IsAdmin_db == 0 {
+		c.JSON(404, gin.H{
+			"message": "you are not allowed to add users",
+			"email":   email,
 		})
 		c.Abort()
 		return
 	}
-
 
 	if Prescription.Stock_Quantity <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -77,9 +89,13 @@ func Decrease_medicn(c *gin.Context) {
 		})
 		return
 	}
-	defer func() {
 
-		_ = tx.Rollback(ctx)
+	
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback(ctx)
+		}
 	}()
 
 	var currentStock int
@@ -122,6 +138,7 @@ func Decrease_medicn(c *gin.Context) {
 		})
 		return
 	}
+	committed = true 
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":     "Stock reduced successfully",
@@ -131,7 +148,19 @@ func Decrease_medicn(c *gin.Context) {
 	})
 }
 
+
+// GetMedicine godoc
+// @Summary Get all medicines
+// @Description Fetch list of all available medicines
+// @Tags Medicine
+// @Accept json
+// @Produce json
+// @Success 200 {array} models.Add_Medicine
+// @Failure 400 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /getmedicen [get]
 func GetMedicen(c *gin.Context) {
+	 // logic
 	res, err := database.Postdb.Query(context.Background(), "select medicine_name , dosage_form , stock_quantity from medicine")
 	if err != nil {
 		c.JSON(404, gin.H{"erro": err})
